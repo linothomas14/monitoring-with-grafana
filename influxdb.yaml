@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app: influxdb
+  name: influxdb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: influxdb
+  serviceName: influxdb
+  template:
+    metadata:
+      labels:
+        app: influxdb
+    spec:
+      containers:
+        - image: influxdb:2.0.6
+          name: influxdb
+          ports:
+            - containerPort: 8086
+              name: influxdb
+          volumeMounts:
+            - mountPath: /var/lib/influxdb2
+              name: data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10G
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: influxdb
+spec:
+  ports:
+    - name: influxdb
+      port: 8086
+      targetPort: 8086
+  selector:
+    app: influxdb
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    # nginx.ingress.kubernetes.io/configuration-snippet: "influxdb server_name=acceptance-ingress host=127.0.0.1 port=8094 measurement=nginx enabled=true;\n"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+  labels:
+    name: influxdb-ingress
+  name: influxdb-ingress
+spec:
+  rules:
+    - http:
+        paths:
+          - backend:
+              service:
+                name: influxdb
+                port:
+                  number: 8086
+            path: /influxdb(/|$)(.*)
+            pathType: Prefix

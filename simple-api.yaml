@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simple-api
+  labels:
+    name: simple-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: simple-api
+  template:
+    metadata:
+      name: simple-api
+      labels:
+        name: simple-api
+    spec:
+      containers:
+        - name: simple-api
+          image: linothomas/simple-api-fintax:latest
+          ports:
+            - containerPort: 9876
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: simple-api-service
+spec:
+  selector:
+    name: simple-api
+  ports:
+    - port: 9876
+      targetPort: 9876
+      name: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    # nginx.ingress.kubernetes.io/configuration-snippet: "influxdb server_name=acceptance-ingress host=127.0.0.1 port=8094 measurement=nginx enabled=true;\n"
+    # nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+  labels:
+    name: api-ingress
+  name: api-ingress
+spec:
+  rules:
+    - http:
+        paths:
+          - backend:
+              service:
+                name: simple-api-service
+                port:
+                  number: 9876
+            path: /myservice(/|$)(.*)
+            pathType: Prefix

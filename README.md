@@ -1,171 +1,83 @@
-# A Simple Service
+## Deploy simple web-services and influxDB to Kubernetes
 
-A simple and configurable service that can, for example, be used for testing container orchestration setups (incl. health check endpoint).
+- Deploy simple web-services, service, and ingress
 
-Note that the versions of `simpleservice`, such as `0.4.0`, used in the following refer to the tags used in the respective [Docker images](https://hub.docker.com/r/mhausenblas/simpleservice/tags/) created. There are no tags or releases as such in this GitHub repo.
+```bash
+  kubectl apply -f simple-api.yaml
+```
 
-Contents:
+- Deploy influxDB, service, and ingress
 
-- [The HTTP API](#the-http-api)
-- [Running it](#running-it)
-- [Changing runtime behaviour](#changing-runtime-behaviour)
-- [Invoking it](#invoking-it)
+```bash
+  kubectl apply -f influxdb.yaml
+```
 
-## The HTTP API
+- Check and note minikube IP
 
-In addition to the endpoints listed here, see also the [change the runtime behaviour](#changing-runtime-behaviour) section below. 
+```bash
+  minikube ip
+```
 
-### `/env` [0.5.0+]
+- Check if deployment success, will return `true`
 
-Principled response:
+```bash
+  http://[MINIKUBE_IP]/myservice/health
+  http://[MINIKUBE_IP]/influxdb/health
+```
 
-    HTTP/1.1 200 OK
-    $HEADER_FIELDS
-     {
-         "env": "$DUMP_OF_ENVIRONMENT_VARS",
-         "version": "$VERSION"
-     }
+## Configure influxDB and telegraf
 
-Example response:
+- Check and note the influxDB service IP
 
-    HTTP/1.1 200 OK                                                                                                                                                             [5/99]
-    Content-Length: 2471
-    Content-Type: application/json
-    Date: Mon, 24 Apr 2017 12:38:47 GMT
-    Etag: "5ccb76cf1545f01fd1e0df4257ff6f8da19678e9"
-    Server: TornadoServer/4.3
+```bash
+  kubectl get svc influxdb
+```
 
-    {
-        "env": "{'USER': 'mhausenblas', ...}"
-        "version": "0.5.0"
-    }    
+- Tunneling through minikube service
 
-### `/info` [0.5.0+]
+```bash
+  minikube tunnel
+```
 
-Principled response:
+- Configure the USERNAME, PASSWORD, ORG and BUCKET for influxDB GUI through `http://[INLFUXDB_IP]:8086`
 
-    HTTP/1.1 200 OK
-    $HEADER_FIELDS
-     {
-         "from": "$REMOTE_IP",
-         "host": ""$HOST:$PORT"",
-         "version": "$VERSION"
-     }
+- Go to Data and choose Telegraf tab to create telegraf configuration on your localmachine
+- Add this line on telegraf conf to watch simple web-service and influxDB health
 
-Example response:
+```bash
+  [[inputs.http_response]]
+    name_suffix = "_myservice"
+    urls = ["http://192.168.59.100/myservice/health"]
+  [[inputs.http_response]]
+    name_suffix = "_influxdb"
+    urls = ["http://192.168.59.100/influxdb/health"]
+```
 
-    HTTP/1.1 200 OK
-    Content-Length: 67
-    Content-Type: application/json
-    Date: Mon, 24 Apr 2017 12:36:37 GMT
-    Etag: "9d09b0a126f68a0fddfec0f494e56fcab29eac15"
-    Server: TornadoServer/4.3
+- Export influxDB token to local machine
 
-    {
-        "from": "127.0.0.1",
-        "host": "localhost:9876",
-        "version": "0.5.0"
-    }
+```bash
+  export INFLUX_TOKEN=<INFLUX_TOKEN>
+```
 
+- Run Telegraf on your local machine
 
-### `/health` [0.4.0+]
+```bash
+  telegraf --config http://[INFLUXDB_IP]:8086/api/v2/telegrafs/...
+```
 
-Principled response:
+- Test your metric on Explore tab and note the Script for later use in Grafana monitoring
+  ![create metric](https://i.ibb.co/wZnFbSF/Whats-App-Image-2022-08-09-at-1-46-33-AM.jpg)
 
-    HTTP/1.1 200 OK
-    $HEADER_FIELDS
-     {
-         "healthy": true
-     }
+## Monitoring with Grafana
 
-Example response:
+- Open Grafana GUI through web browser
 
-    HTTP/1.1 200 OK
-    Content-Length: 17
-    Content-Type: application/json
-    Date: Tue, 11 Oct 2016 17:17:21 GMT
-    Etag: "b40026a9bea9f5096f4ef55d3d23d6730139ff5e"
-    Server: TornadoServer/4.3
+```bash
+  http://localhost:3000
+```
 
-    {
-        "healthy": true
-    }
+- Configure the datasource from influxDB
+  ![Data source conf](https://i.ibb.co/gt7YW25/Whats-App-Image-2022-08-08-at-9-39-53-AM.jpg)
 
-### `/endpoint0` [0.3.0+]
-
-Principled response:
-
-    HTTP/1.1 200 OK
-    $HEADER_FIELDS
-    {
-        "host": "$HOST:$PORT",
-        "result": "all is well",
-        "version": "$VERSION"
-    }
-
-Example response:
-
-    HTTP/1.1 200 OK
-    Content-Length: 71
-    Content-Type: application/json
-    Date: Tue, 11 Oct 2016 16:57:33 GMT
-    Etag: "ce18606c019e1d8c584b796d1fe7402d9767b9b6"
-    Server: TornadoServer/4.3
-
-    {
-        "host": "localhost:9876",
-        "result": "all is well",
-        "version": "0.4.0"
-    }
-
-## Running it
-
-For local execution, Python `2.7.9` is required. You can then run `simpleservice` like so:
-
-    # with defaults:
-    $ python simpleservice.py
-
-    # overwriting certain runtime settings:
-    $ HEALTH_MAX=200 VERSION=1.0 python simpleservice.py
-
-If you fancy it you can run the containerized version of `simpleservice` on your local machine (requires Docker installed):
-
-    $ docker run -P mhausenblas/simpleservice:0.5.0
-
-See also the [container images](https://hub.docker.com/r/mhausenblas/simpleservice/tags/).
-
-
-## Changing runtime behaviour
-
-Through setting the following environment variables, you can change the runtime behaviour of `simpleservice`:
-
-- `PORT0` ... the port `simpleservice` is serving on
-- `VERSION` ... the value of `version` returned in the JSON response of the `/endpoint0` endpoint
-- `HEALTH_MIN` and `HEALTH_MAX` ... the min. and max. delay in milliseconds that the `/health` endpoint responds
-
-## Invoking it
-
-Once `simpleservice` is started you can invoke it like so (here is a local service execution shown):
-
-    $ http localhost:9876/endpoint0
-    HTTP/1.1 200 OK
-    Content-Length: 71
-    Content-Type: application/json
-    Date: Tue, 11 Oct 2016 16:57:33 GMT
-    Etag: "ce18606c019e1d8c584b796d1fe7402d9767b9b6"
-    Server: TornadoServer/4.3
-
-    {
-        "host": "localhost:9876",
-        "result": "all is well",
-        "version": "0.4.0"
-    }
-
-And the service logs would show something like:
-
-    ~$ python simpleservice.py
-    This is a simple service in version v0.4.0 listening on port 9876
-    2016-10-11T05:57:33 INFO /endpoint0 serving from localhost:9876 has been invoked from 127.0.0.1 [at line 58]
-    2016-10-11T05:57:33 INFO 200 GET /endpoint0 (127.0.0.1) 1.10ms [at line 1946]
-
-Note that the available endpoints depend on the version of `simpleservice` as defined in the first section of this docs (aka API).
+- Create Dashboard with noted script metric from InfluxDB before
+  ![Grana Dashboard](https://i.ibb.co/6rGJsBj/b091b7d5-8e66-440e-b5e0-98009a1fca91.jpg)
